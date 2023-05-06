@@ -5,7 +5,7 @@ library(tidyverse)
 library(knitr)
 library(urca)
 library(tseries)
-
+l
 file_path <- file.choose()
 data <- read.csv(file_path)
 
