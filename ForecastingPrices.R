@@ -1,40 +1,34 @@
-library(xts)
+install.packages("vars")
+install.packages("tidyverse")
+install.packages("knitr")
+install.packages("urca")
 install.packages("tseries")
+install.packages("xts")
+
+
 library(vars)
 library(tidyverse)
 library(knitr)
 library(urca)
 library(tseries)
-l
-file_path <- file.choose()
-data <- read.csv(file_path)
+library(xts)
 
-# Loop through all time series and perform the ADF test
-for(i in 1:10) {
-  adf.test(data[,i])
+data <- read.csv("TSA_2023.csv")
+
+
+# Perform ADF test for each variable
+adf_results <- lapply(data[-1], adf.test)
+
+# Extract the test statistics and p-values
+adf_stats <- sapply(adf_results, function(x) x$statistic)
+adf_pvalues <- sapply(adf_results, function(x) x$p.value)
+
+# Print the ADF test results for each variable
+for (i in seq_along(adf_results)) {
+  cat("ADF Test Results for", colnames(data)[i+1], ":\n")
+  cat("Test statistic:", adf_stats[i], "\n")
+  cat("p-value:", adf_pvalues[i], "\n\n")
 }
 
-# Initialize variables to hold the cointegrated pair
-pair_found <- FALSE
-pair <- c()
-
-# Loop through all pairs of time series and perform the cointegration test
-for(i in 1:9) {
-  for(j in (i+1):10) {
-    test <- cointegrationTest(data[,i], data[,j], output=FALSE)
-    if(test@test$p.value < 0.05) {
-      pair_found <- TRUE
-      pair <- c(i, j)
-      break
-    }
-  }
-  if(pair_found) {
-    break
-  }
-}
-
-if(pair_found) {
-  cat("Cointegrated pair found:", colnames(data)[pair], "\n")
-} else {
-  cat("No cointegrated pair found.\n")
-}
+#Alright, looks like only x4 is likely to be stationary.
+#We can check for ACF and PACF, or seasonality. And so on.
