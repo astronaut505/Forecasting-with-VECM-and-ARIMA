@@ -68,3 +68,4 @@ ggseasonplot(x4_ts)
 # Examine the autocorrelation function (ACF) and partial autocorrelation function (PACF)
 acf(x4_ts)
 pacf(x4_ts)
+
