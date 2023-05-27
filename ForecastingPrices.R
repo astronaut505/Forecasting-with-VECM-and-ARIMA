@@ -95,3 +95,33 @@ cat("Best lag order (minimum AIC):", best_k, "\n")
 johansen_result <- ca.jo(variables, type = "trace", K = 5, ecdet = "none", spec = "longrun")
 summary(johansen_result)
 
+# Extract the variables x1 and x3 from your dataset
+x1 <- variables$x1
+x3 <- variables$x3
+
+# Perform the linear regression
+regression <- lm(x3 ~ x1)
+
+# Calculate the residuals
+residuals <- residuals(regression)
+
+# Perform unit root test on the residuals (e.g., Augmented Dickey-Fuller test)
+adf_test <- ur.df(residuals, type = "drift", lags = 0)
+summary(adf_test)
+
+# Extract the variables x1 and x3 from your dataset
+x3 <- variables$x3
+x6 <- variables$x6
+
+# Perform the linear regression
+regression <- lm(x6 ~ x3, data = variables)
+summary(regression)
+
+# Calculate the residuals
+residuals <- residuals(regression)
+
+# Perform unit root test on the residuals (e.g., Augmented Dickey-Fuller test)
+adf_test <- ur.df(residuals, type = "drift", lags = 0)
+summary(adf_test)
+
+
