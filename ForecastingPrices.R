@@ -17,7 +17,8 @@ library(xts)
 
 data <- read.csv("TSA_2023.csv")
 data$Date <- as.Date(data[, 1])
-
+# Select the relevant variables
+variables <- data[, c("x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10")]
 
 # Perform ADF test for each variable
 adf_results <- lapply(data[-1], adf.test)
@@ -64,8 +65,32 @@ plot(decomposition)
 # Check for seasonality using seasonal plots
 seasonplot(x4_ts)
 ggseasonplot(x4_ts)
+monthplot(x4_ts)
 
 # Examine the autocorrelation function (ACF) and partial autocorrelation function (PACF)
 acf(x4_ts)
 pacf(x4_ts)
 
+# Assuming you have your data stored in a matrix 'data'
+# Set the maximum lag order you want to consider
+max_k <- 10
+
+# Estimate the VAR model for lag orders from 1 to 'max_k'
+var_models <- lapply(1:max_k, function(k) VAR(variables, p = k, type = "const"))
+
+# Calculate the AIC values for each VAR model
+aic_values <- sapply(var_models, function(model) AIC(model))
+
+# Find the lag order with the minimum AIC
+min_aic <- min(aic_values)
+best_k <- which.min(aic_values)
+
+# Print the AIC values and the lag order with the minimum AIC
+cat("AIC values:", "\n")
+print(aic_values)
+cat("\n")
+cat("Best lag order (minimum AIC):", best_k, "\n")
+
+# Perform the Johansen cointegration test with best lag from AIC
+johansen_result <- ca.jo(variables, type = "trace", K = 5, ecdet = "none", spec = "longrun")
+summary(johansen_result)
