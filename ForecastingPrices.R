@@ -18,7 +18,7 @@ library(xts)
 data <- read.csv("TSA_2023.csv")
 data$Date <- as.Date(data[, 1])
 # Select the relevant variables
-variables <- data[, c("x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10")]
+variables <- data[, c("x1", "x2", "x3", "x5", "x6", "x7", "x8", "x9", "x10")]
 
 # Perform ADF test for each variable
 adf_results <- lapply(data[-1], adf.test)
@@ -94,3 +94,4 @@ cat("Best lag order (minimum AIC):", best_k, "\n")
 # Perform the Johansen cointegration test with best lag from AIC
 johansen_result <- ca.jo(variables, type = "trace", K = 5, ecdet = "none", spec = "longrun")
 summary(johansen_result)
+
