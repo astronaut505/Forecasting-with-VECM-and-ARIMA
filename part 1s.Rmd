@@ -1,0 +1,245 @@
+## 1 Download all libraries 
+
+```{r}
+install.packages("vars")
+install.packages("tidyverse")
+install.packages("knitr")
+install.packages("urca")
+install.packages("tseries")
+install.packages("xts")
+install.packages("forecast")
+```
+
+```{r}
+
+library(forecast)
+library(vars)
+library(tidyverse)
+library(knitr)
+library(urca)
+library(tseries)
+library(xts)
+
+```
+
+
+## 2 Checking the stationarity of variables
+```{r}
+
+data <- read.csv("TSA_2023.csv")
+data$Date <- as.Date(data[, 1])
+
+```
+
+```{r}
+
+variables <- data[, c("x1", "x2", "x3", "x5", "x6", "x7", "x8", "x9", "x10")]
+
+# Perform ADF test for each variable
+adf_results <- lapply(variables, adf.test)
+
+# Extract the test statistics and p-values
+adf_stats <- sapply(adf_results, function(x) x$statistic)
+adf_pvalues <- sapply(adf_results, function(x) x$p.value)
+
+```
+
+```{r}
+# Print the ADF test results for each variable
+for (i in seq_along(adf_results)) {
+  cat("ADF Test Results for", colnames(data)[i+1], ":\n")
+  cat("Test statistic:", adf_stats[i], "\n")
+  cat("p-value:", adf_pvalues[i], "\n\n")
+}
+
+```
+
+We can see that except x4, all of them are non-stationary
+that is why we will take the differences of all of them except x4 because 
+in VECM model the variables should have same lag orders
+that is why for the rest of the project we will not use x4
+
+Now we take the first difference of all variables
+
+```{r}
+
+dx1 <- diff.xts(data$x1)
+dx2 <- diff.xts(data$x2)
+dx3 <- diff.xts(data$x3)
+dx5 <- diff.xts(data$x5)
+dx6 <- diff.xts(data$x6)
+dx7 <- diff.xts(data$x7)
+dx8 <- diff.xts(data$x8)
+dx9 <- diff.xts(data$x9)
+dx10 <- diff.xts(data$x10)
+
+```
+
+```{r}
+
+# Create a new data frame with differences
+data_diff <- data.frame(date = data$Date, dx1, dx2, dx3, dx5, dx6, dx7, dx8, dx9, dx10)
+
+# Perform ADF test on the differenced variables
+adf_results_diff <- lapply(data_diff[-1, -1], adf.test)
+
+# Extract the test statistics and p-values
+adf_stats_diff <- sapply(adf_results_diff, function(x) x$statistic)
+adf_pvalues_diff <- sapply(adf_results_diff, function(x) x$p.value)
+```
+
+```{r}
+
+# Print the ADF test results for each variable
+for (i in seq_along(adf_results)) {
+  cat("ADF Test Results for", colnames(data_diff)[i+1], ":\n")
+  cat("Test statistic:", adf_stats_diff[i], "\n")
+  cat("p-value:", adf_pvalues_diff[i], "\n\n")
+}
+
+```
+Now we can see that all of them are stationary because 
+p-value of all variables are 0.01 which is less than significant level (0.05)
+
+## 3 Now it is time to check the cointegration of variables
+
+To estimating the cointegrating vector, we will estimate the following model:
+
+```{r}
+
+variables_diff <- c("dx1", "dx2", "dx3", "dx5", "dx6", "dx7", "dx8", "dx9", "dx10")
+
+for (i in 1:(length(variables_diff)-1)) {
+  for (j in (i+1):length(variables_diff)) {
+    formula <- paste(variables_diff[i], "~", variables_diff[j])
+    model <- lm(formula, data = data_diff)
+    
+
+    # Example: Print the model summary
+    cat("Model for", formula, ":\n")
+    print(summary(model))
+    cat("\n")
+  }
+}
+
+```
+
+As a result we have next cointegrated pairs:
+dx3/dx9
+dx5/dx8
+dx5/dx9
+dx5/dx10
+dx6/dx9
+dx8/dx10
+
+and the lowest p-value has the dx5/dx8 pair that is why we will choose this pair
+
+Howeever in pair the Intercept is non-significant, 
+that is why we need to remove it in our model
+
+```{r}
+
+variables_diff <- c("dx5", "dx8")
+
+for (i in 1:(length(variables_diff)-1)) {
+  for (j in (i+1):length(variables_diff)) {
+    formula <- paste(variables_diff[i], "~", variables_diff[j], "-1")  # Exclude intercept term
+    model1 <- lm(formula, data = data_diff)
+    
+    # Perform further analysis or store the results here
+    
+    # Example: Print the model summary
+    cat("Model for", formula, ":\n")
+    print(summary(model))
+    cat("\n")
+  }
+}
+
+```
+
+
+Now we have to test stationarity of residuals:
+
+```{r}
+
+# Extract the residuals from the cointegration model
+residuals <- residuals(model.coint)
+
+# Perform the ADF test on the residuals
+adf_test <- ur.df(residuals, type = "drift", lags = 0)
+
+# Check ADF test results and intercept significance
+adf_summary <- summary(adf_test)
+adf_summary
+
+```
+
+```{r}
+
+# Extract the residuals from the cointegration model
+residuals <- residuals(model.coint)
+
+# Perform ADF test for each residual
+res_adf_results <- lapply(residuals, adf.test)
+
+# Extract the test statistics and p-values
+res_adf_stats <- sapply(res_adf_results, function(x) x$statistic)
+res_adf_pvalues <- sapply(res_adf_results, function(x) x$p.value)
+
+
+```
+
+
+```{r}
+
+# Print the ADF test results for each residual variable
+for (i in seq_along(res_adf_results)) {
+  cat("ADF Test Results for Residual", i, ":\n")
+  cat("Test statistic:", res_adf_stats[i], "\n")
+  cat("p-value:", res_adf_pvalues[i], "\n\n")
+}
+
+```
+
+
+
+
+```{r}
+dx5_dx8 <- data_diff[, c("dx5", "dx8")]
+```
+
+
+
+Now, let's create first lags of residuals and adding them to the dataset
+
+```{r}
+model1$lresid <- lag.xts(residuals(model.coint))
+lresid <- model1$lresid
+
+```
+
+
+
+## 4 Estimating ECM
+
+```{r}
+model1.ecm <- lm(dx5 ~ dx8 + lresid, data = dx5_dx8) 
+```
+
+Let's see the model summary:
+```{r}
+summary(model1.ecm)
+```
+
+The intercept is insignificant, hence we can remove it from the model:
+
+```{r}
+model.ecm <- lm(dx5 ~ dx8 + model1$lresid - 1,
+                # -1 denotes a model without a constant
+                data = dx5_dx8) 
+```
+
+Let's see the model summary again:
+```{r}
+summary(model.ecm)
+```

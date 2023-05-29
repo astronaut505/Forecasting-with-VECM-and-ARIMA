@@ -93,35 +93,30 @@ cat("Best lag order (minimum AIC):", best_k, "\n")
 
 # Perform the Johansen cointegration test with best lag from AIC
 johansen_result <- ca.jo(variables, type = "trace", K = 5, ecdet = "none", spec = "longrun")
-summary(johansen_result)
+summary(johansen_result)# Perform the Johansen cointegration test with best lag from AIC
 
-# Extract the variables x1 and x3 from your dataset
-x1 <- variables$x1
-x3 <- variables$x3
+# Perform the Johansen cointegration test with best lag from AIC
+johansen_result <- ca.jo(variables, type = "trace", K = 5, ecdet = "none", spec = "longrun")
 
-# Perform the linear regression
-regression <- lm(x3 ~ x1)
+# Extract the test statistics
+test_stats <- johansen_result@teststat[1]
 
-# Calculate the residuals
-residuals <- residuals(regression)
+# Set the significance level for determining cointegration
+significance_level <- 0.01
 
-# Perform unit root test on the residuals (e.g., Augmented Dickey-Fuller test)
-adf_test <- ur.df(residuals, type = "drift", lags = 0)
-summary(adf_test)
+# Identify the cointegrated pairs
+coint_pairs <- list()
+for (i in 1:length(test_stats)) {
+  pair <- which(test_stats[i,] > significance_level)
+  coint_pairs[[i]] <- variables[pair]
+}
 
-# Extract the variables x1 and x3 from your dataset
-x3 <- variables$x3
-x6 <- variables$x6
+# Print the cointegrated pairs
+for (i in 1:length(coint_pairs)) {
+  cat("Cointegrated Pair", i, ": ", paste(coint_pairs[[i]], collapse = " - "), "\n")
+}
 
-# Perform the linear regression
-regression <- lm(x6 ~ x3, data = variables)
-summary(regression)
 
-# Calculate the residuals
-residuals <- residuals(regression)
 
-# Perform unit root test on the residuals (e.g., Augmented Dickey-Fuller test)
-adf_test <- ur.df(residuals, type = "drift", lags = 0)
-summary(adf_test)
 
 
