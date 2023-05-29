@@ -1,0 +1,179 @@
+## 1 Download all libraries 
+
+```{r}
+install.packages("vars")
+install.packages("tidyverse")
+install.packages("knitr")
+install.packages("urca")
+install.packages("tseries")
+install.packages("xts")
+install.packages("forecast")
+```
+
+```{r}
+
+library(forecast)
+library(vars)
+library(tidyverse)
+library(knitr)
+library(urca)
+library(tseries)
+library(xts)
+
+```
+
+
+```{r}
+
+testdf <- function(variable, max.augmentations)
+	{
+  
+    require(fUnitRoots)
+    require(lmtest)
+  
+	results_adf <- data.frame(augmentations = -1, adf = 0, p_adf = 0, bgodfrey = 0, p_bg = 0)
+	variable <- coredata(variable[!is.na(variable)])
+	
+	for(augmentations in 0:max.augmentations)
+		{
+		df.test_ <- adfTest(variable, lags = augmentations, type = "c")
+		df_ <- as.numeric(df.test_@test$statistic)
+		p_adf <- as.numeric(df.test_@test$p.value)
+		resids_ <- df.test_@test$lm$residuals
+		bgtest_ <- bgtest(resids_~1, order = 1)
+		bgodfrey <- bgtest_$statistic
+		names(bgodfrey) <- NULL
+		p_bg <- bgtest_$p.value
+		
+		results_adf <- rbind(results_adf, data.frame(augmentations = augmentations, adf = df_, p_adf = p_adf,
+                                                 bgodfrey = bgodfrey, p_bg = p_bg))
+		rm(df.test_, df_, resids_, bgtest_, bgodfrey, p_bg)
+		}
+	
+	results_adf <- results_adf[results_adf$augmentations >= 0,]
+	
+	row.names(results_adf) <- NULL
+	
+	plot(variable, type = "l", col = "darkblue", lwd = 2, 
+	     main = "Plot of the examined variable")
+
+	return(results_adf)
+}	
+
+```
+
+
+## 2 Checking the stationarity of variables
+```{r}
+
+data <- read.csv("C:/Users/Asus/Downloads/TSA_2023_project_data_1.csv")
+
+```
+
+
+The structure of the data:
+```{r}
+data %>% glimpse()
+head(data)
+tail(data)
+```
+
+
+
+Let's also transform the `data.frame` into an `xts` object
+```{r}
+data <- xts(data[, -1], order.by=as.Date(data$date))
+
+``` 
+
+let's take the first difference and compare it with lag 0
+
+```{r}
+
+dx1 <- diff.xts(data$x1)
+dx2 <- diff.xts(data$x2)
+dx3 <- diff.xts(data$x3)
+dx4 <- diff.xts(data$x4)
+dx5 <- diff.xts(data$x5)
+dx6 <- diff.xts(data$x6)
+dx7 <- diff.xts(data$x7)
+dx8 <- diff.xts(data$x8)
+dx9 <- diff.xts(data$x9)
+dx10 <- diff.xts(data$x10)
+
+data$dx1 <- dx1
+data$dx2 <- dx2
+data$dx3 <- dx3
+data$dx4 <- dx4
+data$dx5 <- dx5
+data$dx6 <- dx6
+data$dx7 <- dx7
+data$dx8 <- dx8
+data$dx9 <- dx9
+data$dx10 <- dx10
+
+```
+
+
+```{r}
+testdf(variable = data$x1, max.augmentations = 3)
+testdf(variable = data$dx1, max.augmentations = 3)
+```
+
+
+we can see that there is no need to take the difference because 
+in the 0 lag the variables are stationary p-value of adf is 0.01 which is less than the critical values (0.05). Also as a pair we take x1 and x2 because in their case we do not need to add augmentation because p-value of bg test is higher than critival value (0.05).
+
+
+## 3 Checking the cointegration of x1 and x2
+
+To estimating the cointegrating vector, we will estimate the following model:
+```{r}
+model.coint <- lm(data$x1 ~ data$x2, data = data)
+```
+Let's examine the model summary:
+```{r}
+summary(model.coint)
+```
+As a result we can see that intercept is significant because the p-value is less than the significant level. And the variables x1 and x2 are cointegrated because the p-value of x2 in our model is less than the critical value.
+
+Next, we have to test stationarity of residuals.
+```{r}
+testdf(variable = residuals(model.coint), max.augmentations = 3)
+```
+
+we can see that the residual of model is also stationary which also means that these variables are cointegrated.
+
+As it is stationary we add the residual to our equation
+
+```{r}
+
+data$resid <- xts(residuals(model.coint))
+
+```
+
+
+## 4 Estimate the ECM model
+
+```{r}
+model.ecm <- lm(data$x1 ~ data$x2 + resid, data = data) 
+```
+
+Let's see the model summary:
+```{r}
+summary(model.ecm)
+```
+We can see that all components are significant because residual value, intercept and the x2 variable all of them have the p-value less than the significant level.
+
+## 5 JC test
+
+```{r}
+
+
+ 
+```
+
+Let's find interpretation of the test results:
+```{r }
+cbind(summary(johan.test.trace)@teststat, summary(johan.test.trace)@cval)
+```
