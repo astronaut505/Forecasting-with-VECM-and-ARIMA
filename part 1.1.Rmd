@@ -1,0 +1,175 @@
+## 1 Download all libraries 
+
+```{r}
+install.packages("vars")
+install.packages("tidyverse")
+install.packages("knitr")
+install.packages("urca")
+install.packages("tseries")
+install.packages("xts")
+install.packages("forecast")
+```
+
+```{r}
+
+library(forecast)
+library(vars)
+library(tidyverse)
+library(knitr)
+library(urca)
+library(tseries)
+library(xts)
+
+```
+
+
+```{r}
+source('testdf.r')
+```
+
+
+## 2 Checking the stationarity of variables
+```{r}
+
+data <- read.csv("TSA_2023.csv")
+sum(is.na(data))
+data[, 1] <- as.Date(data[, 1], format = "%Y-%m-%d")
+colnames(data)[1] <- "date"
+head(data)
+```
+
+
+The structure of the data:
+```{r}
+data %>% glimpse()
+head(data)
+tail(data)
+```
+
+
+```{r}
+variables <- data[, c("x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10")]
+
+# Perform ADF test for each variable
+adf_results <- lapply(data[-1], adf.test)
+
+# Extract the test statistics and p-values
+adf_stats <- sapply(adf_results, function(x) x$statistic)
+adf_pvalues <- sapply(adf_results, function(x) x$p.value)
+
+# Print the ADF test results for each variable
+for (i in seq_along(adf_results)) {
+  cat("ADF Test Results for", colnames(data)[i+1], ":\n")
+  cat("Test statistic:", adf_stats[i], "\n")
+  cat("p-value:", adf_pvalues[i], "\n\n")
+}
+
+library(ggplot2)
+
+# Create a data frame with the variables
+df <- data.frame(date = data$date, variables)
+
+# Convert the date column to a proper date format
+df$date <- as.Date(df$date)
+
+# Reshape the data from wide to long format for plotting
+df_long <- tidyr::gather(df, key = "variable", value = "value", -date)
+
+# Plot the variables
+ggplot(data = df_long, aes(x = date, y = value, color = variable)) +
+  geom_line() +
+  labs(x = "Date", y = "Value", color = "Variable") +
+  theme_minimal()
+```
+
+
+```{r}
+# Perform variable selection using VARselect
+var_select <- VARselect(variables, lag.max = 6)
+
+# Print the variable selection results
+print(var_select)
+
+# Get the AIC values from VARselect
+aic_values <- var_select$criteria[, 3]  # Use column index 1 for AIC
+
+# Find the lag order that minimizes AIC
+selected_lag_order <- which.min(aic_values)
+
+# Print the selected lag order
+cat("Selected Lag Order based on AIC:", selected_lag_order, "\n")
+
+```
+
+
+```{r}
+# Estimate the VAR model with lag order 3
+var_model <- VAR(variables, p = 3)  # Replace 'variables' with your dataset
+
+# Print the summary of the VAR model
+#summary(var_model)
+```
+
+```{r}
+# Create an empty data frame to store the differenced variables
+df_diff <- data.frame(date = data$date[-1])
+
+# Compute differencing for each variable
+for (i in 1:ncol(variables)) {
+  var_diff <- diff(variables[, i])
+  col_name <- colnames(variables)[i]
+  df_diff[, col_name] <- var_diff  # Save the differenced variable in the data frame
+}
+
+# Reshape the data from wide to long format for plotting
+df_long <- tidyr::gather(df_diff, key = "variable", value = "value", -date)
+
+# Plot the variables
+ggplot(data = df_long, aes(x = date, y = value, color = variable)) +
+  geom_line() +
+  labs(x = "Date", y = "Value", color = "Variable") +
+  theme_minimal()
+
+```
+```{r}
+# Apply ADF test to each differenced variable
+adf_results <- lapply(df_diff[, -1], adf.test)
+
+# Extract the test statistics and p-values
+adf_stats <- sapply(adf_results, function(x) x$statistic)
+adf_pvalues <- sapply(adf_results, function(x) x$p.value)
+
+# Print the ADF test results for each differenced variable
+for (i in seq_along(adf_results)) {
+  cat("ADF Test Results for", colnames(df_diff)[i+1], ":\n")
+  cat("Test statistic:", adf_stats[i], "\n")
+  cat("p-value:", adf_pvalues[i], "\n\n")
+}
+```
+
+```{r}
+# Perform Johansen test
+johansen_result <- ca.jo(df_diff[, -1], type = "trace", ecdet = "none")
+# Print the results
+summary(johansen_result)
+
+```
+
+```{r}
+# Extract the eigenvalues from the Johansen test results
+eigenvalues <- c(0.8153845, 0.7830446, 0.6668660, 0.5873746, 0.5676961, 0.5463933, 0.5097186, 0.4565827, 0.3276016, 0.2509342)
+
+# Set the significance level for determining cointegration
+significance_level <- 0.05
+
+# Find the number of cointegrated variables
+num_cointegrated <- sum(eigenvalues > significance_level)
+
+# Identify the cointegrated variables
+cointegrated_variables <- colnames(df_diff[, -1])[1:num_cointegrated]
+
+# Print the summary
+cat("Number of cointegrated variables:", num_cointegrated, "\n")
+cat("Cointegrated variables:", paste(cointegrated_variables, collapse = ", "), "\n") 
+
+```
