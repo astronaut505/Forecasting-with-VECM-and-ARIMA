@@ -89,26 +89,36 @@ data$dx10 <- dx10
 
 
 ```{r}
-testdf(variable = data$x2, max.augmentations = 9)
-testdf(variable = data$dx4, max.augmentations = 3)
+testdf(variable = data$x8, max.augmentations = 9)
+testdf(variable = data$dx8, max.augmentations = 3)
 ```
 
 
-we can see that there is no need to take the difference because 
-in the 0 lag the variables are stationary p-value of adf is 0.01 which is less than the critical values (0.05). Also as a pair we take x1 and x2 because in their case we do not need to add augmentation because p-value of bg test is higher than critival value (0.05).
+We can see that all variables are non-stationary that is why we take the first difference of them and then all of them are become stationary.
 
-
-## 3 Checking the cointegration of x1 and x2
+## 3 Checking the cointegration of x4 and x8
 
 To estimating the cointegrating vector, we will estimate the following model:
 ```{r}
-model.coint <- lm(data$x1 ~ data$x9, data = data)
+model.coint <- lm(data$dx4 ~ data$dx8, data = data)
 ```
 Let's examine the model summary:
 ```{r}
 summary(model.coint)
 ```
-As a result we can see that intercept is significant because the p-value is less than the significant level. And the variables x1 and x9 are cointegrated because the p-value of x2 in our model is less than the critical value.
+As a result we can see that intercept is non-significant because the p-value is higher than the significant level, that is why we need to remove it. And the variables dx4 and dx8 are cointegrated because the p-value of dx8 in our model is less than the critical value.
+
+Removing the intercept
+
+```{r}
+model.coint <- lm(data$dx4 ~ data$dx8 - 1, data = data)
+```
+
+Now we get the output withoud the intercept
+```{r}
+summary(model.coint)
+```
+
 
 Next, we have to test stationarity of residuals.
 ```{r}
@@ -121,32 +131,244 @@ As it is stationary we add the residual to our equation
 
 ```{r}
 
-data$resid <- xts(residuals(model.coint))
+data$resid <- (residuals(model.coint))
 
 ```
-
-
-## 4 Estimate the ECM model
 
 ```{r}
-model.ecm <- lm(data$x1 ~ data$x2 + resid, data = data) 
-```
+head(data)
 
-Let's see the model summary:
-```{r}
-summary(model.ecm)
 ```
-We can see that all components are significant because residual value, intercept and the x2 variable all of them have the p-value less than the significant level.
-
-## 5 JC test
 
 ```{r}
+Data <- data.frame(x4 = data$x4, x8 = data$x8)
 
-
- 
 ```
 
-Let's find interpretation of the test results:
+
+
+## Johansen test
+
+```{r}
+johansen_result <- ca.jo(Data, type = "trace", ecdet = "none", K = 4)
+```
+
 ```{r }
-cbind(summary(johan.test.trace)@teststat, summary(johan.test.trace)@cval)
+cbind(summary(johansen_result)@teststat, summary(johansen_result)@cval)
 ```
+
+
+```{r}
+summary(johansen_result)@V
+```
+
+Weights W: 
+```{r}
+summary(johansen_result)@W
+```
+
+
+## it's time to create VECM model
+
+```{r}
+Data.vec4 <- cajorls(johansen_result, # defined specification
+                        r = 1) # number of cointegrating vectors
+```
+
+There is no summary for the whole object available.
+
+```{r}
+summary(data.vec4$rlm)
+```
+Here we can see that all components of models are significant.
+
+
+We can reparametrize the VEC model into VAR (here we use the specification object):
+```{r}
+Data.vec4.asVAR <- vec2var(johansen_result, r = 1)
+```
+
+Lets see the result:
+```{r}
+Data.vec4.asVAR
+```
+
+Based on the reparametrized model, we can calculate and plot Impulse Response Functions:
+
+```{r}
+plot(irf(Data.vec4.asVAR, n.ahead = 3))
+```
+
+We can also perform variance decomposition:
+```{r}
+plot(fevd(Data.vec4.asVAR, n.ahead = 36))
+```
+
+The results are pretty similar to the earlier `VAR(4)` model.
+
+Let's also check if model residuals are autocorrelated.
+
+Residuals can be extracted only from the VAR reparametrized model.
+
+```{r}
+head(residuals(ppi_cpi.vec4.asVAR))
+serial.test(ppi_cpi.vec4.asVAR)
+```
+
+The null is rejected.
+
+You can see the ACF and PACF functions by plotting the results of the `serial.test()`
+```{r fig.width=12, fig.height = 12}
+plot(serial.test(ppi_cpi.vec4.asVAR))
+```
+
+The term EDF stands for Empirical Distribution Function. 
+
+Obviously, for the better quality of the histogram we can extract residuals from the `ppi_cpi.vec4.asVAR` object and create it on our own and visually access dissimilarity to normal distribution.
+
+Let's then create both histograms
+
+```{r}
+ppi_cpi.vec4.asVAR %>%
+  residuals() %>%
+  as_tibble() %>%
+  ggplot(aes(`resids of ppi`)) +
+  geom_histogram(aes(y =..density..),
+                 colour = "black", 
+                 fill = "pink") +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(residuals(ppi_cpi.vec4.asVAR)[, 1]), 
+                            sd = sd(residuals(ppi_cpi.vec4.asVAR)[, 1]))) +
+  theme_bw() + 
+  labs(
+    title = "Density of PPI residuals", 
+    y = "", x = "",
+    caption = "source: own calculations"
+  )
+```
+
+```{r}
+ppi_cpi.vec4.asVAR %>%
+  residuals() %>%
+  as_tibble() %>%
+  ggplot(aes(`resids of cpi`)) +
+  geom_histogram(aes(y =..density..),
+                 colour = "black", 
+                 fill = "pink") +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(residuals(ppi_cpi.vec4.asVAR)[, 2]), 
+                            sd = sd(residuals(ppi_cpi.vec4.asVAR)[, 2]))) +
+  theme_bw() + 
+  labs(
+    title = "Density of CPI residuals", 
+    y = "", x = "",
+    caption = "source: own calculations"
+  )
+```
+
+Lets also check normality of residuals more formally. We can apply the Jarque-Bera (JB) test. We have to remember that the Johansen test is sensitive to lack of normality.
+```{r}
+normality.test(ppi_cpi.vec4.asVAR)
+```
+
+The null about normality is rejected.
+
+## 4 Forecasting based on the VECM 
+
+Now we will calculate 14-month-ahead forecasts for both `ppi` and `cpi` variables.
+
+Lets estimate a model on a shorter sample:
+
+```{r}
+tail(Data, 20)
+```
+
+Lets put aside last 14 observations:
+```{r}
+Data.short <- Data["/2017", ]
+tail(Data.short)
+```
+
+Now, we now perform again the multivariate test of Johansen, this time on the shorter sample.
+```{r}
+johan.test.eigen2.short <- ca.jo(ppi_cpi.short,
+                                 ecdet = "const",
+                                 type = "trace", 
+                                 K = 4,
+                                 season = 12)
+summary(johan.test.eigen2.short)
+```
+
+We are now ready to run a forecast. First, we need to reparametrize VEC into VAR. As we know, it can be done via the `vec2var()` function.
+```{r}
+ppi_cpi.vec4.fore <- 
+  predict(
+    vec2var(
+      johan.test.eigen2.short, 
+      r = 1),     # no of cointegrating vectors 
+    n.ahead = 14, # forecast horizon
+    ci = 0.95)    # confidence level for intervals
+```
+
+The resulting object has the same structure as forecasts for VAR model.
+
+VEC forecasts for `ppi`:
+```{r}
+ppi_cpi.vec4.fore$fcst$ppi
+```
+
+VEC forecasts for `cpi`:
+```{r}
+ppi_cpi.vec4.fore$fcst$cpi
+```
+
+Lets store it as an `xts` object. The correct set of dates (index) can be extracted from the original `xts` data object.
+
+```{r}
+tail(index(ppi_cpi), 14)
+ppi_forecast <- xts(ppi_cpi.vec4.fore$fcst$ppi[,-4], 
+                    # we exclude the last column with CI
+                    tail(index(ppi_cpi), 14))
+```
+
+Correction of the variable names:
+```{r}
+names(ppi_forecast) <- c("PPI_fore", "PPI_lower", "PPI_upper")
+```
+
+Lets do the same for `cpi` forecasts:
+```{r}
+cpi_forecast <- xts(ppi_cpi.vec4.fore$fcst$cpi[, -4],
+                    # we exclude the last column with CI
+                    tail(index(ppi_cpi), 14))
+names(cpi_forecast) <- c("CPI_fore", "CPI_lower", "CPI_upper")
+```
+
+Now, we can merge the data together:
+```{r}
+ppi_cpi <- merge(ppi_cpi, 
+                 ppi_forecast,
+                 cpi_forecast)
+```
+
+Lets compare the forecasted and real data on the plot.
+
+```{r}
+plot(ppi_cpi["2017/", c("ppi", "PPI_fore",
+                        "PPI_lower", "PPI_upper")], 
+     major.ticks = "years", 
+     grid.ticks.on = "years",
+     grid.ticks.lty = 3,
+     main = "14 month forecast of energy ppi",
+     col = c("black", "blue", "red", "red"))
+plot(ppi_cpi["2017/", c("cpi", "CPI_fore",
+                        "CPI_lower", "CPI_upper")], 
+     major.ticks = "years", 
+     grid.ticks.on = "years",
+     grid.ticks.lty = 3,
+     main = "14 month forecast of energy cpi",
+     col = c("black", "blue", "red", "red"))
+```
+
+
+
