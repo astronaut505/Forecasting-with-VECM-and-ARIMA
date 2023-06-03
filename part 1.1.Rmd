@@ -47,7 +47,7 @@ tail(data)
 
 
 
-Let's also transform the `data.frame` into an `xts` object
+transformation of `data.frame` into an `xts` object
 ```{r}
 data <- xts(data[, -1], order.by=as.Date(data$date))
 
@@ -59,7 +59,7 @@ head(data)
 
 ```
 
-let's take the first difference and compare it with lag 0
+ first difference and compare it with lag 0
 
 ```{r}
 

@@ -40,6 +40,39 @@ plot(data[, c(4, 8)],
      main = "Producer prices and consumer prices",
      legend.loc = "topleft")
 ```
+```{r}
+
+dx1 <- diff.xts(data$x1)
+dx2 <- diff.xts(data$x2)
+dx3 <- diff.xts(data$x3)
+dx4 <- diff.xts(data$x4)
+dx5 <- diff.xts(data$x5)
+dx6 <- diff.xts(data$x6)
+dx7 <- diff.xts(data$x7)
+dx8 <- diff.xts(data$x8)
+dx9 <- diff.xts(data$x9)
+dx10 <- diff.xts(data$x10)
+
+data$dx1 <- dx1
+data$dx2 <- dx2
+data$dx3 <- dx3
+data$dx4 <- dx4
+data$dx5 <- dx5
+data$dx6 <- dx6
+data$dx7 <- dx7
+data$dx8 <- dx8
+data$dx9 <- dx9
+data$dx10 <- dx10
+
+```
+
+
+```{r}
+testdf(variable = data$x4, max.augmentations = 6)
+testdf(variable = data$dx4, max.augmentations = 6)
+```
+
+
 
 ```{r}
 x4_x8 <- data[, c(4, 8)]
@@ -219,14 +252,23 @@ x4_x8.short <- x4_x8[1:970, ]
 tail(x4_x8.short)
 ```
 
+```{r}
+johan.test.eigen.short <- 
+  ca.jo(x4_x8.short, 
+        ecdet = "const", 
 
+        type = "eigen", 
+        K = 5,          
+        ) 
+summary(johan.test.trace) 
+```
 
 Reparametrization VEC into VAR:
 ```{r}
 x4_x8.vec4.fore <- 
   predict(
     vec2var(
-      johan.test.eigen2.short, 
+      johan.test.eigen.short, 
       r = 1),     # no of cointegrating vectors 
     n.ahead = 30, # forecast horizon
     ci = 0.95)    # confidence level for intervals
@@ -435,7 +477,7 @@ arima.best.AIC_4 <-
              trace = TRUE)      # show summary of all models considered
 ```
 
-for x4  ARIMA(3,1,0)
+for x4  ARIMA(5,1,4)
 
 ```{r}
 arima.best.AIC_8 <- 
@@ -452,7 +494,7 @@ arima.best.AIC_8 <-
              trace = TRUE)      # show summary of all models considered
 ```
 
-ARIMA(2,1,0)
+ARIMA(6,1,4)
 
 
 This function estimate models with all possible combinations of model orders. However, it does not remove intermediate lags.
@@ -534,6 +576,9 @@ arima.best.BIC_4 <-
              allowdrift = TRUE, # include a constant
              trace = TRUE)      # show summary of all models considered
 ```
+For 4 ARIMA(3,1,4)
+
+
 ```{r}
 arima.best.BIC_8 <- 
   auto.arima(x8,
@@ -548,11 +593,17 @@ arima.best.BIC_8 <-
              allowdrift = TRUE, # include a constant
              trace = TRUE)      # show summary of all models considered
 ```
+For x8 ARIMA(2,1,4)
+
+
+
+
+
 ```{r}
-AIC(arima.best.BIC_4, arima314_4)
+AIC(arima.best.BIC_4, arima213_4)
 ```
 ```{r}
-BIC(arima.best.BIC_8, arima314_4)
+BIC(arima.best.BIC_8, arima415_8)
 ```
 ```{r}
 AIC(arima.best.AIC_4, arima213_4)
@@ -703,11 +754,13 @@ head(forecasts_data8)
 
 ```{r}
 start_date <- as.Date("2020-12-04")  
-time_index <- seq(start_date, length.out = nrow(forecasts_data), by = "day")
+time_index4 <- seq(start_date, length.out = nrow(forecasts_data4), by = "day")
 
-forecasts_xts4 <- xts(forecasts_data4, order.by = time_index)
+time_index8 <- seq(start_date, length.out = nrow(forecasts_data8), by = "day")
 
-forecasts_xts8 <- xts(forecasts_data8, order.by = time_index)
+forecasts_xts4 <- xts(forecasts_data4, order.by = time_index4)
+
+forecasts_xts8 <- xts(forecasts_data8, order.by = time_index8)
 
 
 x4 <- data[970:1000, 4]
