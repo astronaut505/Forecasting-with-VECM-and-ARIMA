@@ -1,0 +1,778 @@
+## 1 Data importing
+
+```{r}
+library(vars)
+library(forecast)
+library(tidyverse)
+library(knitr)
+library(urca)
+library(tseries)
+library(xts)
+library(quantmod)
+```
+
+
+```{r}
+data <- read.csv("C:/Users/Asus/Downloads/TSA_2023_project_data_1.csv")
+```
+
+
+```{r}
+data %>% glimpse()
+data %>% head()
+data %>% tail()
+```
+
+Transformation of data frame into the `xts` object:
+```{r}
+data$date <- as.Date(data[, 1], format = '%d/%m/%Y')
+data <- xts(data[, -1], data$date)
+```
+
+
+Plot variables on the graph:
+```{r}
+plot(data[, c(4, 8)],
+     col = c("black", "blue"),
+     major.ticks = "years", 
+     grid.ticks.on = "years",
+     grid.ticks.lty = 3,
+     main = "Producer prices and consumer prices",
+     legend.loc = "topleft")
+```
+
+```{r}
+x4_x8 <- data[, c(4, 8)]
+head(x4_x8)
+```
+
+
+
+## 2 Johansen cointegration test
+
+
+```{r}
+johan.test.trace <- 
+  ca.jo(x4_x8, 
+        ecdet = "const", 
+
+        type = "trace", 
+        K = 5,          
+        ) 
+summary(johan.test.trace) 
+```
+
+
+Selecting the optimal lag order using information criteria:
+```{r}
+lag_order <- VARselect(x4_x8, lag.max = 10, type = "const")
+print(lag_order)
+```
+
+
+
+Alternative variant of the test (eigen):
+```{r}
+johan.test.eigen <- 
+  ca.jo(x4_x8, # data 
+        ecdet = "const", # "none" for no intercept in cointegrating equation, 
+        # "const" for constant term in cointegrating equation and 
+        # "trend" for trend variable in cointegrating equation
+        type = "eigen",  # type of the test: trace or eigen
+        K = 5,           # lag order of the series (levels) in the VAR
+        ) 
+summary(johan.test.eigen) 
+```
+
+Results are same
+
+
+
+## 3 The VECM model
+
+```{r}
+x4_x8.vec4 <- cajorls(johan.test.eigen, 
+                        r = 1) 
+
+print(x4_x8.vec4)
+
+```
+
+
+
+```{r}
+summary(x4_x8.vec4)
+
+
+summary(x4_x8.vec4$rlm)
+
+
+str(x4_x8.vec4)
+```
+
+
+
+VEC model into VAR:
+```{r}
+x4_x8.vec4.asVAR <- vec2var(johan.test.eigen, r = 1)
+```
+
+
+Result:
+```{r}
+x4_x8.vec4.asVAR
+```
+
+
+
+Impulse Response Functions:
+```{r}
+plot(irf(x4_x8.vec4.asVAR, n.ahead = 30))
+```
+
+
+
+Variance decomposition:
+```{r}
+plot(fevd(x4_x8.vec4.asVAR, n.ahead = 36))
+```
+
+
+Checking if model residuals are autocorrelated:
+```{r}
+head(residuals(x4_x8.vec4.asVAR))
+serial.test(x4_x8.vec4.asVAR)
+```
+
+The null is rejected.
+
+
+ACF and PACF functions:
+```{r fig.width=12, fig.height = 12}
+plot(serial.test(x4_x8.vec4.asVAR))
+```
+
+
+
+Histograms of residuals:
+```{r}
+x4_x8.vec4.asVAR %>%
+  residuals() %>%
+  as_tibble() %>%
+  ggplot(aes(`resids of x4`)) +
+  geom_histogram(aes(y =..density..),
+                 colour = "black", 
+                 fill = "pink") +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(residuals(x4_x8.vec4.asVAR)[, 1]), 
+                            sd = sd(residuals(x4_x8.vec4.asVAR)[, 1]))) +
+  theme_bw() + 
+  labs(
+    title = "Density of x4 residuals", 
+    y = "", x = "",
+    caption = "source: own calculations"
+  )
+```
+
+
+```{r}
+x4_x8.vec4.asVAR %>%
+  residuals() %>%
+  as_tibble() %>%
+  ggplot(aes(`resids of x8`)) +
+  geom_histogram(aes(y =..density..),
+                 colour = "black", 
+                 fill = "pink") +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(residuals(x4_x8.vec4.asVAR)[, 2]), 
+                            sd = sd(residuals(x4_x8.vec4.asVAR)[, 2]))) +
+  theme_bw() + 
+  labs(
+    title = "Density of x8 residuals", 
+    y = "", x = "",
+    caption = "source: own calculations"
+  )
+```
+
+
+Jarque-Bera (JB) test:
+```{r}
+normality.test(x4_x8.vec4.asVAR)
+```
+
+The null about normality is not rejected.
+
+
+
+## 4 Forecasting with VECM 
+
+
+
+```{r}
+tail(x4_x8, 20)
+```
+
+
+30 observations:
+```{r}
+x4_x8.short <- x4_x8[1:970, ]
+tail(x4_x8.short)
+```
+
+
+
+Reparametrization VEC into VAR:
+```{r}
+x4_x8.vec4.fore <- 
+  predict(
+    vec2var(
+      johan.test.eigen2.short, 
+      r = 1),     # no of cointegrating vectors 
+    n.ahead = 30, # forecast horizon
+    ci = 0.95)    # confidence level for intervals
+```
+
+
+
+VEC forecasts for `x4`:
+```{r}
+# Check if the object exists
+exists("x4_x8.vec4.fore")
+
+# Check the structure of the object
+str(x4_x8.vec4.fore)
+
+# Check if the nested components exist
+exists("x4_x8.vec4.fore$fcst")
+exists("x4_x8.vec4.fore$fcst$x4")
+
+
+
+
+x4_x8.vec4.fore$fcst$x4
+```
+
+
+
+VEC forecasts for `x8`:
+```{r}
+x4_x8.vec4.fore$fcst$x8
+```
+
+
+
+
+into xts:
+```{r}
+tail(index(x4_x8), 30)
+x4_forecast <- xts(x4_x8.vec4.fore$fcst$x4[,-4], 
+                    # we exclude the last column with CI
+                    tail(index(x4_x8), 30))
+```
+
+Correction of the variable names:
+```{r}
+names(x4_forecast) <- c("x4_fore", "x4_lower", "x4_upper")
+```
+
+
+Lets do the same for `x8` forecasts:
+```{r}
+x8_forecast <- xts(x4_x8.vec4.fore$fcst$x8[, -4],
+                    # we exclude the last column with CI
+                    tail(index(x4_x8), 30))
+names(x8_forecast) <- c("x8_fore", "x8_lower", "x8_upper")
+```
+
+
+Merging the data together:
+```{r}
+x4_x8 <- merge(x4_x8, 
+                 x4_forecast,
+                 x8_forecast)
+```
+
+
+Comparios of forecasted and real data on the plot:
+```{r}
+plot(x4_x8["2020-12-04/", c("x4", "x4_fore",
+                        "x4_lower", "x4_upper")], 
+     major.ticks = "days", 
+     grid.ticks.on = "days",
+     grid.ticks.lty = 3,
+     main = "30 days forecast of x4",
+     col = c("black", "blue", "red", "red"))
+plot(x4_x8["2020-12-04/", c("x8", "x8_fore",
+                        "x8_lower", "x8_upper")], 
+     major.ticks = "days", 
+     grid.ticks.on = "days",
+     grid.ticks.lty = 3,
+     main = "30 days forecast of x8",
+     col = c("black", "blue", "red", "red"))
+```
+
+Model evaluations:
+```{r}
+x4mae <- sum(abs(data[971:1000, 4] - x4_forecast[, 1])) / 30
+x4mse <- (sum(data[971:1000, 4] - x4_forecast[, 1]) / 30) ^ 2
+x4mape <- sum(abs((data[971:1000, 4] - x4_forecast[, 1]) / data[971:1000, 4])) / 30 * 100
+x4amape <- sum(abs((data[971:1000, 4] - x4_forecast[, 1]) / (data[971:1000, 4] + x4_forecast[, 1]))) / 30 * 100
+             
+
+x4mae
+x4mse
+x4mape
+x4amape
+
+
+print("-----------------------------------------------------------------")
+
+
+x8mae <- sum(abs(data[971:1000, 8] - x8_forecast[, 1])) / 30
+x8mse <- (sum(data[971:1000, 8] - x8_forecast[, 1]) / 30) ^ 2
+x8mape <- sum(abs((data[971:1000, 8] - x8_forecast[, 1]) / data[971:1000, 8])) / 30 * 100
+x8amape <- sum(abs((data[971:1000, 8] - x8_forecast[, 1]) / (data[971:1000, 8] + x8_forecast[, 1]))) / 30 * 100
+             
+
+x8mae
+x8mse
+x8mape
+x8amape
+```
+
+
+
+
+
+## ARIMA model
+
+
+
+```{r}
+
+x4 <- data[0:970, 4]
+x8 <- data[0:970, 8]
+```
+
+
+First differences:
+```{r}
+dx4 <- diff.xts(x4)
+dx8 <- diff.xts(x8)
+```
+
+
+##  Box-Jenkins procedure
+
+
+
+ACF and PACF:
+```{r}
+par(mfrow = c(2, 1)) 
+acf(dx4,
+    lag.max = 36, # max lag for ACF
+    ylim = c(-0.1, 0.1),   # limits for the y axis - we give c(min, max)
+    lwd = 5,               # line width
+    col = "dark green",
+    na.action = na.pass)   # do not stop if there are missing values in the data
+pacf(dx4, 
+     lag.max = 36, 
+     lwd = 5, col = "dark green",
+     na.action = na.pass)
+par(mfrow = c(1, 1)) # we restore the original single panel
+```
+
+For x4 ARIMA(2,1,3)
+
+
+```{r}
+par(mfrow = c(2, 1)) 
+acf(dx8,
+    lag.max = 36, # max lag for ACF
+    ylim = c(-0.1, 0.1),   # limits for the y axis - we give c(min, max)
+    lwd = 5,               # line width
+    col = "dark green",
+    na.action = na.pass)   # do not stop if there are missing values in the data
+pacf(dx8, 
+     lag.max = 36, 
+     lwd = 5, col = "dark green",
+     na.action = na.pass)
+par(mfrow = c(1, 1)) # we restore the original single panel
+```
+For x8 ARIMA(4,1,5)
+
+
+
+```{r}
+arima213_4 <- Arima(x4,  # variable
+                  order = c(3, 1, 4)  # (p,d,q) parameters
+                  )
+
+arima415_8 <- Arima(x8,  # variable
+                  order = c(4, 1, 5)  # (p,d,q) parameters
+                  )
+```
+
+
+
+## Best models based on AIC and BIC criterions
+
+
+
+AIC information criterion:
+```{r}
+arima.best.AIC_4 <- 
+  auto.arima(x4,
+             d = 1,             # parameter d of ARIMA model
+             max.p = 6,         # Maximum value of p
+             max.q = 6,         # Maximum value of q
+             max.order = 12,    # maximum p+q
+             start.p = 1,       # Starting value of p in stepwise procedure
+             start.q = 1,       # Starting value of q in stepwise procedure
+             ic = "aic",        # Information criterion to be used in model selection.
+             stepwise = FALSE,  # if FALSE considers all models
+             allowdrift = TRUE, # include a constant
+             trace = TRUE)      # show summary of all models considered
+```
+
+for x4  ARIMA(3,1,0)
+
+```{r}
+arima.best.AIC_8 <- 
+  auto.arima(x8,
+             d = 1,             # parameter d of ARIMA model
+             max.p = 6,         # Maximum value of p
+             max.q = 6,         # Maximum value of q
+             max.order = 12,    # maximum p+q
+             start.p = 1,       # Starting value of p in stepwise procedure
+             start.q = 1,       # Starting value of q in stepwise procedure
+             ic = "aic",        # Information criterion to be used in model selection.
+             stepwise = FALSE,  # if FALSE considers all models
+             allowdrift = TRUE, # include a constant
+             trace = TRUE)      # show summary of all models considered
+```
+
+ARIMA(2,1,0)
+
+
+This function estimate models with all possible combinations of model orders. However, it does not remove intermediate lags.
+
+The results might be surprising.
+```{r}
+coeftest(arima.best.AIC_4)
+
+coeftest(arima.best.AIC_8)
+```
+
+Let's preform the Ljung-Box test:
+```{r}
+Box.test(resid(arima.best.AIC_4), type = "Ljung-Box", lag =  5)
+Box.test(resid(arima.best.AIC_4), type = "Ljung-Box", lag = 10)
+Box.test(resid(arima.best.AIC_4), type = "Ljung-Box", lag = 15)
+Box.test(resid(arima.best.AIC_4), type = "Ljung-Box", lag = 20)
+Box.test(resid(arima.best.AIC_4), type = "Ljung-Box", lag = 25)
+```
+
+```{r}
+Box.test(resid(arima.best.AIC_8), type = "Ljung-Box", lag =  5)
+Box.test(resid(arima.best.AIC_8), type = "Ljung-Box", lag = 10)
+Box.test(resid(arima.best.AIC_8), type = "Ljung-Box", lag = 15)
+Box.test(resid(arima.best.AIC_8), type = "Ljung-Box", lag = 20)
+Box.test(resid(arima.best.AIC_8), type = "Ljung-Box", lag = 25)
+```
+
+
+How many lags should we include in Ljung-Box test? We aim using as many lags as we need to capture 'any meaningful and troublesome correlations'.
+
+
+Let's see correlograms for the residuals:
+```{r}
+par(mfrow = c(2, 1))  
+acf(resid(arima.best.AIC_4), 
+    lag.max = 48, 
+    lwd = 7, 
+    col = "dark green", 
+    na.action = na.pass,
+    ylim = c(-0.08, 0.05))
+pacf(resid(arima.best.AIC_4), 
+     lag.max = 48, 
+     lwd = 7, 
+     col = "dark green", 
+     na.action = na.pass)
+par(mfrow = c(1, 1))  
+```
+
+
+```{r}
+par(mfrow = c(2, 1))  
+acf(resid(arima.best.AIC_8), 
+    lag.max = 48, 
+    lwd = 7, 
+    col = "dark green", 
+    na.action = na.pass,
+    ylim = c(-0.08, 0.05))
+pacf(resid(arima.best.AIC_8), 
+     lag.max = 48, 
+     lwd = 7, 
+     col = "dark green", 
+     na.action = na.pass)
+par(mfrow = c(1, 1))  
+```
+
+Best model based on BIC criterion:
+```{r}
+arima.best.BIC_4 <- 
+  auto.arima(x4,
+             d = 1,             # parameter d of ARIMA model
+             max.p = 6,         # Maximum value of p
+             max.q = 6,         # Maximum value of q
+             max.order = 12,    # maximum p+q
+             start.p = 1,       # Starting value of p in stepwise procedure
+             start.q = 1,       # Starting value of q in stepwise procedure
+             ic = "bic",        # Information criterion to be used in model selection.
+             stepwise = FALSE,  # if FALSE considers all models
+             allowdrift = TRUE, # include a constant
+             trace = TRUE)      # show summary of all models considered
+```
+```{r}
+arima.best.BIC_8 <- 
+  auto.arima(x8,
+             d = 1,             # parameter d of ARIMA model
+             max.p = 6,         # Maximum value of p
+             max.q = 6,         # Maximum value of q
+             max.order = 12,    # maximum p+q
+             start.p = 1,       # Starting value of p in stepwise procedure
+             start.q = 1,       # Starting value of q in stepwise procedure
+             ic = "bic",        # Information criterion to be used in model selection.
+             stepwise = FALSE,  # if FALSE considers all models
+             allowdrift = TRUE, # include a constant
+             trace = TRUE)      # show summary of all models considered
+```
+```{r}
+AIC(arima.best.BIC_4, arima314_4)
+```
+```{r}
+BIC(arima.best.BIC_8, arima314_4)
+```
+```{r}
+AIC(arima.best.AIC_4, arima213_4)
+```
+```{r}
+BIC(arima.best.AIC_8, arima415_8)
+```
+Based on AIC and BIC criterions best models are as follows:
+
+For x4 ARIMA(3,1,0)
+
+For x8 ARIMA(2,1,0)
+
+These models have lower AIC and BIC compare to manual selected models.
+
+
+
+Ljung-Box test for `arima.best.BIC_4 and arima.best.BIC_8` model:
+```{r}
+Box.test(resid(arima.best.BIC_4), type = "Ljung-Box", lag =  5)
+Box.test(resid(arima.best.BIC_4), type = "Ljung-Box", lag = 11)
+Box.test(resid(arima.best.BIC_4), type = "Ljung-Box", lag = 15)
+Box.test(resid(arima.best.BIC_4), type = "Ljung-Box", lag = 20)
+Box.test(resid(arima.best.BIC_4), type = "Ljung-Box", lag = 25)
+```
+
+```{r}
+Box.test(resid(arima.best.BIC_8), type = "Ljung-Box", lag =  5)
+Box.test(resid(arima.best.BIC_8), type = "Ljung-Box", lag = 11)
+Box.test(resid(arima.best.BIC_8), type = "Ljung-Box", lag = 15)
+Box.test(resid(arima.best.BIC_8), type = "Ljung-Box", lag = 20)
+Box.test(resid(arima.best.BIC_8), type = "Ljung-Box", lag = 25)
+```
+
+
+
+Correlograms for the residuals:
+```{r}
+par(mfrow = c(2, 1))  
+acf(resid(arima.best.BIC_4), 
+    lag.max = 48, 
+    lwd = 7, 
+    col = "dark green", 
+    na.action = na.pass,
+    ylim = c(-0.06, 0.06))
+pacf(resid(arima.best.BIC_4), 
+     lag.max = 48, 
+     lwd = 7, 
+     col = "dark green", 
+     na.action = na.pass)
+par(mfrow = c(1, 1))  
+
+par(mfrow = c(2, 1))  
+acf(resid(arima.best.BIC_8), 
+    lag.max = 48, 
+    lwd = 7, 
+    col = "dark green", 
+    na.action = na.pass,
+    ylim = c(-0.06, 0.06))
+pacf(resid(arima.best.BIC_8), 
+     lag.max = 48, 
+     lwd = 7, 
+     col = "dark green", 
+     na.action = na.pass)
+par(mfrow = c(1, 1))  
+```
+
+
+
+
+
+
+
+## Forecasting with ARIMA
+
+
+
+```{r}
+tail(x4, 30)
+```
+
+
+
+```{r}
+forecasts4 <- forecast(arima.best.BIC_4, # model for prediction
+                      h = 30) # how many periods outside the sample
+
+forecasts8 <- forecast(arima.best.BIC_8, # model for prediction
+                      h = 30) # how many periods outside the sample
+```
+
+
+Lets see the result
+```{r}
+forecasts4
+forecasts8
+```
+
+
+Data preparation:
+```{r}
+forecasts4$mean
+forecasts8$mean
+```
+
+Lets check the class of this object
+```{r}
+class(forecasts4$mean)
+
+class(forecasts8$mean)
+```
+
+
+```{r}
+as.numeric(forecasts4$mean)
+
+
+as.numeric(forecasts8$mean)
+
+```
+
+80% and 95% confidence interval for upp and low:
+```{r}
+forecasts4$lower
+forecasts4$upper
+
+forecasts8$lower
+forecasts8$upper
+```
+
+```{r}
+forecasts_data4 <- data.frame(f_mean  = as.numeric(forecasts4$mean),
+                             f_lower = as.numeric(forecasts4$lower[, 2]),
+                             f_upper = as.numeric(forecasts4$upper[, 2]))
+
+
+forecasts_data8 <- data.frame(f_mean  = as.numeric(forecasts8$mean),
+                             f_lower = as.numeric(forecasts8$lower[, 2]),
+                             f_upper = as.numeric(forecasts8$upper[, 2]))
+
+```
+
+```{r}
+head(forecasts_data4)
+
+head(forecasts_data8)
+```
+
+```{r}
+start_date <- as.Date("2020-12-04")  
+time_index <- seq(start_date, length.out = nrow(forecasts_data), by = "day")
+
+forecasts_xts4 <- xts(forecasts_data4, order.by = time_index)
+
+forecasts_xts8 <- xts(forecasts_data8, order.by = time_index)
+
+
+x4 <- data[970:1000, 4]
+
+x8 <- data[970:1000, 8]
+
+
+x4_f <- merge(x4, forecasts_xts4)
+
+x8_f <- merge(x8, forecasts_xts8)
+
+
+```
+
+
+```{r}
+plot(x4_f["2020-12-04/", # limit the rows
+          c("x4", "f_mean", "f_lower", "f_upper")], 
+     major.ticks = "days", 
+     grid.ticks.on = "days",
+     grid.ticks.lty = 3,
+     main = "30 day forecast of x4",
+     col = c("black", "blue", "red", "red"))
+
+
+plot(x8_f["2020-12-04/", # limit the rows
+          c("x8", "f_mean", "f_lower", "f_upper")], 
+     major.ticks = "days", 
+     grid.ticks.on = "days",
+     grid.ticks.lty = 3,
+     main = "30 day forecast of x8",
+     col = c("black", "blue", "red", "red"))
+```
+
+
+
+Model evaluations:
+```{r}
+maex4 <- sum(abs(data[971:998, 4] - x4_f[-(31:33), 2])) / 30
+msex4 <- (sum(data[971:998, 4] - x4_f[-(31:33), 2]) / 30) ^ 2
+mapex4 <- sum(abs((data[971:998, 4] - x4_f[-(31:33), 2]) / data[971:998, 4])) /30 * 100
+amapex4 <- sum(abs((data[971:998, 4] - x4_f[-(31:33), 2]) / (data[971:998, 4] + x4_f[-(31:33), 2]))) / 30 * 100
+             
+
+maex4
+msex4
+mapex4
+amapex4
+
+
+print("-----------------------------------------------------------------")
+
+
+maex8 <- sum(abs(data[971:998, 8] - x8_f[-(31:33), 2])) / 30
+msex8 <- (sum(data[971:998, 8] - x8_f[-(31:33), 2]) / 30) ^ 2
+mapex8 <- sum(abs((data[971:998, 8] - x8_f[-(31:33), 2]) / data[971:998, 8])) /30 * 100
+amapex8 <- sum(abs((data[971:998, 8] - x8_f[-(31:33), 2]) / (data[971:998, 8] + x8_f[-(31:33), 2]))) / 30 * 100
+             
+
+maex8
+msex8
+mapex8
+amapex8
+```
+
+
+
+Conclusion: VECM model outperformed the ARIMA model.
