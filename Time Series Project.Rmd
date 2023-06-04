@@ -32,12 +32,12 @@ data <- xts(data[, -1], data$date)
 
 Plot variables on the graph:
 ```{r}
-plot(data[, c(4, 8)],
-     col = c("black", "blue"),
+plot(data[,],
+     col = c("black", "blue", "red", "pink", "green", "yellow", "orange", "darkgreen", "darkred", "darkblue"),
      major.ticks = "years", 
      grid.ticks.on = "years",
      grid.ticks.lty = 3,
-     main = "Producer prices and consumer prices",
+     main = "Variables",
      legend.loc = "topleft")
 ```
 ```{r}
