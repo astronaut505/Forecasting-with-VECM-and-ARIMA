@@ -68,8 +68,8 @@ data$dx10 <- dx10
 
 
 ```{r}
-testdf(variable = data$x4, max.augmentations = 6)
-testdf(variable = data$dx4, max.augmentations = 6)
+testdf(variable = data$x9, max.augmentations = 6)
+testdf(variable = data$dx9, max.augmentations = 6)
 ```
 
 
@@ -112,7 +112,7 @@ johan.test.eigen <-
         # "const" for constant term in cointegrating equation and 
         # "trend" for trend variable in cointegrating equation
         type = "eigen",  # type of the test: trace or eigen
-        K = 5,           # lag order of the series (levels) in the VAR
+        K = 6,           # lag order of the series (levels) in the VAR
         ) 
 summary(johan.test.eigen) 
 ```
@@ -232,7 +232,6 @@ Jarque-Bera (JB) test:
 ```{r}
 normality.test(x4_x8.vec4.asVAR)
 ```
-
 The null about normality is not rejected.
 
 
@@ -353,7 +352,7 @@ plot(x4_x8["2020-12-04/", c("x8", "x8_fore",
      col = c("black", "blue", "red", "red"))
 ```
 
-Model evaluations:
+Model validation:
 ```{r}
 x4mae <- sum(abs(data[971:1000, 4] - x4_forecast[, 1])) / 30
 x4mse <- (sum(data[971:1000, 4] - x4_forecast[, 1]) / 30) ^ 2
@@ -381,6 +380,19 @@ x8mse
 x8mape
 x8amape
 ```
+X4:
+MAE 4.262539
+MSE 12.18847
+MAPE 3.677132
+AMAPE 1.794055
+-----------------------------------------------------------------
+X8:
+MAE 2.516064
+MSE 2.91298
+MAPE 1.304072
+AMAPE 0.6563629
+
+
 
 
 
@@ -441,19 +453,24 @@ pacf(dx8,
      na.action = na.pass)
 par(mfrow = c(1, 1)) # we restore the original single panel
 ```
-For x8 ARIMA(4,1,5)
-
-
-
+for X8 ARIMA(4,1,4)
+Manually selected models:
 ```{r}
+
 arima213_4 <- Arima(x4,  # variable
-                  order = c(3, 1, 4)  # (p,d,q) parameters
+                  order = c(2, 1, 3)  # (p,d,q) parameters
                   )
 
-arima415_8 <- Arima(x8,  # variable
-                  order = c(4, 1, 5)  # (p,d,q) parameters
+arima414_8 <- Arima(x8,  # variable
+                  order = c(4, 1, 4)  # (p,d,q) parameters
                   )
 ```
+
+
+
+
+
+
 
 
 
@@ -497,16 +514,15 @@ arima.best.AIC_8 <-
 ARIMA(6,1,4)
 
 
-This function estimate models with all possible combinations of model orders. However, it does not remove intermediate lags.
 
-The results might be surprising.
+
 ```{r}
-coeftest(arima.best.AIC_4)
+coeftest(arima.best.BIC_4)
 
-coeftest(arima.best.AIC_8)
+coeftest(arima.best.BIC_8)
 ```
 
-Let's preform the Ljung-Box test:
+Ljung-Box test:
 ```{r}
 Box.test(resid(arima.best.AIC_4), type = "Ljung-Box", lag =  5)
 Box.test(resid(arima.best.AIC_4), type = "Ljung-Box", lag = 10)
@@ -524,10 +540,10 @@ Box.test(resid(arima.best.AIC_8), type = "Ljung-Box", lag = 25)
 ```
 
 
-How many lags should we include in Ljung-Box test? We aim using as many lags as we need to capture 'any meaningful and troublesome correlations'.
 
 
-Let's see correlograms for the residuals:
+
+Correlograms for the residuals:
 ```{r}
 par(mfrow = c(2, 1))  
 acf(resid(arima.best.AIC_4), 
@@ -598,26 +614,32 @@ For x8 ARIMA(2,1,4)
 
 
 
+```{r}
+AIC(arima213_4, arima414_8)
+```
 
 ```{r}
-AIC(arima.best.BIC_4, arima213_4)
+BIC(arima213_4, arima414_8)
+```
+
+```{r}
+AIC(arima.best.AIC_4, arima.best.AIC_8)
+
 ```
 ```{r}
-BIC(arima.best.BIC_8, arima415_8)
+BIC(arima.best.AIC_4, arima.best.AIC_8)
+
 ```
 ```{r}
-AIC(arima.best.AIC_4, arima213_4)
+AIC(arima.best.BIC_4, arima.best.BIC_8)
 ```
 ```{r}
-BIC(arima.best.AIC_8, arima415_8)
+BIC(arima.best.BIC_4, arima.best.BIC_8)
 ```
-Based on AIC and BIC criterions best models are as follows:
+Based on the AIC and BIC the lowest result we get with manually selected models
 
-For x4 ARIMA(3,1,0)
-
-For x8 ARIMA(2,1,0)
-
-These models have lower AIC and BIC compare to manual selected models.
+for X4 ARIMA(2,1,4)
+for X8 ARIMA(3,1,4)
 
 
 
@@ -690,6 +712,7 @@ tail(x4, 30)
 ```{r}
 forecasts4 <- forecast(arima.best.BIC_4, # model for prediction
                       h = 30) # how many periods outside the sample
+                    
 
 forecasts8 <- forecast(arima.best.BIC_8, # model for prediction
                       h = 30) # how many periods outside the sample
@@ -825,6 +848,18 @@ msex8
 mapex8
 amapex8
 ```
+
+X4:
+MAE 6.155756
+MSE 34.24836
+MAPE 5.317292
+AMAPE 2.55722
+-----------------------------------------------------------------
+X8:
+MAE 2.693477
+MSE 4.211638
+MAPE 1.394241
+AMAPE 0.703122
 
 
 
